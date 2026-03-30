@@ -42,3 +42,23 @@ python src/server.py --host 0.0.0.0 --port 9000 --db data/readings.db
 cd server
 python src/inspect_readings.py --db data/readings.db --limit 20
 ```
+
+## Run live web dashboard
+
+In a second terminal:
+
+```bash
+cd server
+python src/dashboard.py --host 127.0.0.1 --port 8080 --db data/readings.db
+```
+
+Then open:
+
+- `http://127.0.0.1:8080`
+
+The dashboard auto-refreshes every 2 seconds and shows:
+
+- Total readings
+- Average moisture percentage
+- Device count from latest records
+- Recent reading table

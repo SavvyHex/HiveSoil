@@ -12,7 +12,7 @@ This project demonstrates a **multi-client server architecture** for soil moistu
 1. ESP32 clients connect to the server over Wi-Fi and TCP.
 2. Each client sends newline-delimited JSON payloads with moisture data.
 3. The Python server validates, acknowledges, and stores readings in SQLite.
-4. Stored data can be inspected from the command line.
+4. Stored data can be inspected from the command line or viewed live in a web dashboard.
 
 ## Project Structure
 
@@ -43,7 +43,16 @@ cd server
 python src/inspect_readings.py --db data/readings.db --limit 20
 ```
 
-### 4) Flash ESP32 client
+### 4) Start live dashboard
+
+```bash
+cd server
+python src/dashboard.py --host 127.0.0.1 --port 8080 --db data/readings.db
+```
+
+Open `http://127.0.0.1:8080` in your browser.
+
+### 5) Flash ESP32 client
 
 Open `client/esp32/soil_moisture_client.ino` in Arduino IDE, set your:
 
