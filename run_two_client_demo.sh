@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Runs a full demo with:
 # 1) server started in background
-# 2) simulator with exactly two clients in foreground for N seconds
+# 2) simulator with exactly two clients in foreground (runs until Ctrl+C)
 # 3) automatic cleanup and sample DB output
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,10 +13,10 @@ SIM_DIR="$ROOT_DIR/client/simulator"
 HOST="127.0.0.1"
 PORT="${PORT:-9000}"
 DB_PATH="$SERVER_DIR/data/readings.db"
-DURATION_SECONDS="${1:-20}"
+LOG_DIR="$ROOT_DIR/logs"
 
-SERVER_LOG="$SERVER_DIR/server_demo.log"
-SIM_LOG="$SIM_DIR/simulator_demo.log"
+SERVER_LOG="$LOG_DIR/server_demo.log"
+SIM_LOG="$LOG_DIR/simulator_demo.log"
 
 SERVER_PID=""
 
@@ -52,9 +52,18 @@ cleanup() {
     wait "$SERVER_PID" 2>/dev/null || true
   fi
 }
-trap cleanup EXIT INT TERM
+
+on_interrupt() {
+  echo
+  echo "[demo] Ctrl+C received, shutting down..."
+  exit 0
+}
+
+trap cleanup EXIT
+trap on_interrupt INT TERM
 
 mkdir -p "$SERVER_DIR/data"
+mkdir -p "$LOG_DIR"
 
 PORT="$(pick_available_port "$PORT")"
 
@@ -71,10 +80,10 @@ if ! kill -0 "$SERVER_PID" 2>/dev/null; then
   exit 1
 fi
 
-echo "[demo] Running simulator with 2 clients for ${DURATION_SECONDS}s"
+echo "[demo] Running simulator with 2 clients (press Ctrl+C to stop)"
 (
   cd "$SIM_DIR"
-  timeout "$DURATION_SECONDS" python3 multi_client_simulator.py \
+  python3 multi_client_simulator.py \
     --host "$HOST" \
     --port "$PORT" \
     --clients 2 \
