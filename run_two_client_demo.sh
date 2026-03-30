@@ -11,7 +11,7 @@ SERVER_DIR="$ROOT_DIR/server"
 SIM_DIR="$ROOT_DIR/client/simulator"
 
 HOST="127.0.0.1"
-PORT="9000"
+PORT="${PORT:-9000}"
 DB_PATH="$SERVER_DIR/data/readings.db"
 DURATION_SECONDS="${1:-20}"
 
@@ -19,6 +19,32 @@ SERVER_LOG="$SERVER_DIR/server_demo.log"
 SIM_LOG="$SIM_DIR/simulator_demo.log"
 
 SERVER_PID=""
+
+port_in_use() {
+  local port="$1"
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn "sport = :$port" | grep -q LISTEN
+    return
+  fi
+
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -iTCP:"$port" -sTCP:LISTEN -Pn >/dev/null 2>&1
+    return
+  fi
+
+  return 1
+}
+
+pick_available_port() {
+  local start_port="$1"
+  local candidate="$start_port"
+
+  while port_in_use "$candidate"; do
+    candidate=$((candidate + 1))
+  done
+
+  echo "$candidate"
+}
 
 cleanup() {
   if [[ -n "$SERVER_PID" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
@@ -29,6 +55,8 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 mkdir -p "$SERVER_DIR/data"
+
+PORT="$(pick_available_port "$PORT")"
 
 echo "[demo] Starting server on $HOST:$PORT"
 (
