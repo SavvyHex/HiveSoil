@@ -14,10 +14,10 @@ from urllib.parse import urlparse
 
 
 HTML_PAGE = """<!doctype html>
-<html lang=\"en\">
+<html lang="en">
 <head>
-  <meta charset=\"utf-8\" />
-  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>HiveSoil Live Dashboard</title>
   <style>
     :root {
@@ -135,6 +135,56 @@ HTML_PAGE = """<!doctype html>
 
     .table tr:last-child td { border-bottom: 0; }
 
+    .table-controls {
+      margin-top: 10px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .btn {
+      border: 1px solid var(--border);
+      background: #fff8ec;
+      color: #5f5548;
+      border-radius: 999px;
+      padding: 7px 14px;
+      font-size: 0.84rem;
+      cursor: pointer;
+    }
+
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .charts-grid {
+      margin-top: 14px;
+      display: grid;
+      gap: 14px;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .chart-title {
+      font-size: 0.95rem;
+      color: #5f5448;
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+
+    .chart-wrap {
+      margin-top: 8px;
+      width: 100%;
+      overflow-x: auto;
+    }
+
+    .mini-chart {
+      width: 100%;
+      min-height: 280px;
+      border: 1px solid #efe7da;
+      border-radius: 10px;
+      background: linear-gradient(180deg, #fffdf8 0%, #fbf6ec 100%);
+      display: block;
+    }
+
     .status {
       margin-top: 10px;
       color: var(--muted);
@@ -145,6 +195,7 @@ HTML_PAGE = """<!doctype html>
 
     @media (max-width: 840px) {
       .grid { grid-template-columns: 1fr 1fr; }
+      .charts-grid { grid-template-columns: 1fr; }
     }
 
     @media (max-width: 560px) {
@@ -156,31 +207,31 @@ HTML_PAGE = """<!doctype html>
   </style>
 </head>
 <body>
-  <div class=\"wrap\">
-    <div class=\"head\">
+  <div class="wrap">
+    <div class="head">
       <div>
         <h1>HiveSoil Live Dashboard</h1>
-        <div class=\"sub\">Realtime view of incoming soil moisture readings</div>
+        <div class="sub">Realtime view of incoming soil moisture readings</div>
       </div>
-      <div class=\"pill\" id=\"updated\">Loading...</div>
+      <div class="pill" id="updated">Loading...</div>
     </div>
 
-    <div class=\"grid\">
-      <div class=\"card\">
-        <div class=\"label\">Connected Devices (seen in latest records)</div>
-        <div class=\"value\" id=\"deviceCount\">-</div>
+    <div class="grid">
+      <div class="card">
+        <div class="label">Connected Devices (seen in latest records)</div>
+        <div class="value" id="deviceCount">-</div>
       </div>
-      <div class=\"card\">
-        <div class=\"label\">Average Moisture</div>
-        <div class=\"value\" id=\"avgMoisture\">-</div>
+      <div class="card">
+        <div class="label">Average Moisture</div>
+        <div class="value" id="avgMoisture">-</div>
       </div>
-      <div class=\"card\">
-        <div class=\"label\">Total Readings Saved</div>
-        <div class=\"value\" id=\"totalReadings\">-</div>
+      <div class="card">
+        <div class="label">Total Readings Saved</div>
+        <div class="value" id="totalReadings">-</div>
       </div>
     </div>
 
-    <table class=\"table\" id=\"recentTable\">
+    <table class="table" id="recentTable">
       <thead>
         <tr>
           <th>ID</th>
@@ -194,11 +245,35 @@ HTML_PAGE = """<!doctype html>
       <tbody></tbody>
     </table>
 
-    <div class=\"status\" id=\"status\">Waiting for data...</div>
+    <div class="table-controls">
+      <button id="showMoreBtn" class="btn" type="button">Show more</button>
+    </div>
+
+    <div class="charts-grid">
+      <div class="card">
+        <div class="chart-title" id="chartATitle">Client chart A</div>
+        <div class="chart-wrap">
+          <svg id="chartA" class="mini-chart" viewBox="0 0 960 320" preserveAspectRatio="none"></svg>
+        </div>
+      </div>
+      <div class="card">
+        <div class="chart-title" id="chartBTitle">Client chart B</div>
+        <div class="chart-wrap">
+          <svg id="chartB" class="mini-chart" viewBox="0 0 960 320" preserveAspectRatio="none"></svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="status" id="status">Waiting for data...</div>
   </div>
 
   <script>
     const REFRESH_MS = 2000;
+    const INITIAL_VISIBLE_ROWS = 5;
+    const STEP_VISIBLE_ROWS = 5;
+    const CHART_COLORS = ['#20639b', '#d1495b'];
+    let visibleRows = INITIAL_VISIBLE_ROWS;
+    let latestRows = [];
 
     function esc(v) {
       return String(v)
@@ -215,17 +290,110 @@ HTML_PAGE = """<!doctype html>
       return `${n.toFixed(2)}%`;
     }
 
-    function render(data) {
-      document.getElementById('deviceCount').textContent = data.device_count;
-      document.getElementById('avgMoisture').textContent = fmtPercent(data.avg_moisture_percent);
-      document.getElementById('totalReadings').textContent = data.total_readings;
-      document.getElementById('updated').textContent = `Updated ${new Date(data.server_time).toLocaleTimeString()}`;
-      document.getElementById('status').textContent = `Auto-refresh every ${REFRESH_MS / 1000}s`;
+    function toPointsPath(points) {
+      if (points.length === 0) return '';
+      let path = `M ${points[0].x} ${points[0].y}`;
+      for (let i = 1; i < points.length; i += 1) {
+        path += ` L ${points[i].x} ${points[i].y}`;
+      }
+      return path;
+    }
 
+    function renderNoDataChart(svgId, titleId, titleText, message) {
+      const chart = document.getElementById(svgId);
+      document.getElementById(titleId).textContent = titleText;
+      chart.innerHTML = `
+        <text x="50%" y="50%" text-anchor="middle" fill="#8e8477" font-size="15">
+          ${esc(message)}
+        </text>
+      `;
+    }
+
+    function renderDeviceChart(svgId, titleId, deviceId, rows, color) {
+      const chart = document.getElementById(svgId);
+      const width = 960;
+      const height = 320;
+      const pad = { top: 18, right: 24, bottom: 42, left: 46 };
+      const plotW = width - pad.left - pad.right;
+      const plotH = height - pad.top - pad.bottom;
+
+      chart.innerHTML = '';
+      document.getElementById(titleId).textContent = `Client: ${deviceId}`;
+
+      const parsed = rows
+        .map((row) => ({
+          ...row,
+          t: new Date(row.server_received_at).getTime(),
+          p: Number(row.moisture_percent),
+        }))
+        .filter((row) => Number.isFinite(row.t) && Number.isFinite(row.p))
+        .sort((a, b) => a.t - b.t);
+
+      if (parsed.length === 0) {
+        renderNoDataChart(svgId, titleId, `Client: ${deviceId}`, 'No plottable points yet');
+        return;
+      }
+
+      const minT = parsed[0].t;
+      const maxT = parsed[parsed.length - 1].t;
+      const rangeT = Math.max(1, maxT - minT);
+
+      chart.insertAdjacentHTML('beforeend', `
+        <line x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${height - pad.bottom}" stroke="#cbbca8" stroke-width="1" />
+        <line x1="${pad.left}" y1="${height - pad.bottom}" x2="${width - pad.right}" y2="${height - pad.bottom}" stroke="#cbbca8" stroke-width="1" />
+        <text x="${pad.left}" y="${pad.top - 6}" fill="#8e8477" font-size="11">100%</text>
+        <text x="${pad.left}" y="${height - pad.bottom + 14}" fill="#8e8477" font-size="11">0%</text>
+        <text x="${pad.left}" y="${height - 8}" fill="#8e8477" font-size="11">time</text>
+      `);
+
+      const points = parsed.map((row) => {
+        const x = pad.left + ((row.t - minT) / rangeT) * plotW;
+        const y = pad.top + (1 - (Math.max(0, Math.min(100, row.p)) / 100)) * plotH;
+        return { x: Number(x.toFixed(2)), y: Number(y.toFixed(2)) };
+      });
+
+      const pathData = toPointsPath(points);
+      chart.insertAdjacentHTML('beforeend', `
+        <path d="${pathData}" fill="none" stroke="${color}" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round" />
+      `);
+
+      points.forEach((point) => {
+        chart.insertAdjacentHTML('beforeend', `
+          <circle cx="${point.x}" cy="${point.y}" r="2.2" fill="${color}" />
+        `);
+      });
+    }
+
+    function renderTwoClientCharts(rows) {
+      const deviceRows = {};
+      for (const row of rows) {
+        if (!deviceRows[row.device_id]) deviceRows[row.device_id] = [];
+        deviceRows[row.device_id].push(row);
+      }
+
+      const deviceIds = Object.keys(deviceRows).sort();
+
+      if (deviceIds.length === 0) {
+        renderNoDataChart('chartA', 'chartATitle', 'Client chart A', 'No data yet');
+        renderNoDataChart('chartB', 'chartBTitle', 'Client chart B', 'No data yet');
+        return;
+      }
+
+      renderDeviceChart('chartA', 'chartATitle', deviceIds[0], deviceRows[deviceIds[0]], CHART_COLORS[0]);
+
+      if (deviceIds.length > 1) {
+        renderDeviceChart('chartB', 'chartBTitle', deviceIds[1], deviceRows[deviceIds[1]], CHART_COLORS[1]);
+      } else {
+        renderNoDataChart('chartB', 'chartBTitle', 'Client chart B', 'Waiting for second client');
+      }
+    }
+
+    function renderTable(rows) {
       const tbody = document.querySelector('#recentTable tbody');
       tbody.innerHTML = '';
 
-      for (const row of data.recent_readings) {
+      const visible = rows.slice(0, visibleRows);
+      for (const row of visible) {
         const tr = document.createElement('tr');
         const pct = Number(row.moisture_percent);
         const pctClass = pct < 30 ? 'dry' : '';
@@ -239,6 +407,37 @@ HTML_PAGE = """<!doctype html>
         `;
         tbody.appendChild(tr);
       }
+
+      const btn = document.getElementById('showMoreBtn');
+      if (visibleRows >= rows.length) {
+        btn.textContent = 'All readings shown';
+        btn.disabled = true;
+      } else {
+        btn.textContent = 'Show more';
+        btn.disabled = false;
+      }
+    }
+
+    function render(data) {
+      latestRows = data.recent_readings || [];
+
+      if (latestRows.length < visibleRows) {
+        visibleRows = Math.max(INITIAL_VISIBLE_ROWS, latestRows.length);
+      }
+
+      document.getElementById('deviceCount').textContent = data.device_count;
+      document.getElementById('avgMoisture').textContent = fmtPercent(data.avg_moisture_percent);
+      document.getElementById('totalReadings').textContent = data.total_readings;
+      document.getElementById('updated').textContent = `Updated ${new Date(data.server_time).toLocaleTimeString()}`;
+      document.getElementById('status').textContent = `Auto-refresh every ${REFRESH_MS / 1000}s`;
+
+      renderTable(latestRows);
+      renderTwoClientCharts(latestRows);
+    }
+
+    function onShowMore() {
+      visibleRows += STEP_VISIBLE_ROWS;
+      renderTable(latestRows);
     }
 
     async function load() {
@@ -253,6 +452,7 @@ HTML_PAGE = """<!doctype html>
     }
 
     load();
+    document.getElementById('showMoreBtn').addEventListener('click', onShowMore);
     setInterval(load, REFRESH_MS);
   </script>
 </body>
@@ -305,7 +505,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             SELECT id, device_id, moisture_raw, moisture_percent, server_received_at, client_ip
             FROM readings
             ORDER BY id DESC
-            LIMIT 25
+          LIMIT 120
             """
         ).fetchall()
 
