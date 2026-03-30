@@ -83,7 +83,11 @@ class SoilMoistureServer:
         finally:
             print(f"[disconnect] {client_ip}")
             writer.close()
-            await writer.wait_closed()
+            try:
+                await writer.wait_closed()
+            except ConnectionResetError:
+                # Peer disconnected abruptly; socket is already closed.
+                pass
 
     def _process_payload(self, payload: str, client_ip: str) -> dict[str, Any]:
         now_iso = datetime.now(timezone.utc).isoformat()
