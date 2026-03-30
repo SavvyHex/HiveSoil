@@ -12,13 +12,16 @@ SIM_DIR="$ROOT_DIR/client/simulator"
 
 HOST="127.0.0.1"
 PORT="${PORT:-9000}"
+DASHBOARD_PORT="${DASHBOARD_PORT:-8080}"
 DB_PATH="$SERVER_DIR/data/readings.db"
 LOG_DIR="$ROOT_DIR/logs"
 
 SERVER_LOG="$LOG_DIR/server_demo.log"
 SIM_LOG="$LOG_DIR/simulator_demo.log"
+DASHBOARD_LOG="$LOG_DIR/dashboard_demo.log"
 
 SERVER_PID=""
+DASHBOARD_PID=""
 
 port_in_use() {
   local port="$1"
@@ -47,6 +50,11 @@ pick_available_port() {
 }
 
 cleanup() {
+  if [[ -n "$DASHBOARD_PID" ]] && kill -0 "$DASHBOARD_PID" 2>/dev/null; then
+    kill "$DASHBOARD_PID" 2>/dev/null || true
+    wait "$DASHBOARD_PID" 2>/dev/null || true
+  fi
+
   if [[ -n "$SERVER_PID" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
     kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
@@ -66,6 +74,7 @@ mkdir -p "$SERVER_DIR/data"
 mkdir -p "$LOG_DIR"
 
 PORT="$(pick_available_port "$PORT")"
+DASHBOARD_PORT="$(pick_available_port "$DASHBOARD_PORT")"
 
 echo "[demo] Starting server on $HOST:$PORT"
 (
@@ -79,6 +88,21 @@ if ! kill -0 "$SERVER_PID" 2>/dev/null; then
   echo "[demo] Server failed to start. Check $SERVER_LOG"
   exit 1
 fi
+
+echo "[demo] Starting dashboard on $HOST:$DASHBOARD_PORT"
+(
+  cd "$SERVER_DIR"
+  python3 src/dashboard.py --host "$HOST" --port "$DASHBOARD_PORT" --db "$DB_PATH" >"$DASHBOARD_LOG" 2>&1
+) &
+DASHBOARD_PID="$!"
+
+sleep 1
+if ! kill -0 "$DASHBOARD_PID" 2>/dev/null; then
+  echo "[demo] Dashboard failed to start. Check $DASHBOARD_LOG"
+  exit 1
+fi
+
+echo "[demo] Web dashboard: http://$HOST:$DASHBOARD_PORT"
 
 echo "[demo] Running simulator with 2 clients (press Ctrl+C to stop)"
 (
