@@ -8,3 +8,5 @@ server/data/
 # IDE files
 .vscode/
 .idea/
+
+logs/
